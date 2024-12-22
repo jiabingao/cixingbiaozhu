@@ -1,49 +1,129 @@
-name: Python Application Workflow
+name: Build macOS App
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-latest
-
+    
     steps:
-    # 检出代码
-    - name: Check out code
-      uses: actions/checkout@v3
-
-    # 设置 Python 环境
+    - uses: actions/checkout@v3
+    
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: 3.9  # 指定 Python 版本为 3.9
-
-    # 安装依赖
+        python-version: '3.9'
+        
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install --upgrade setuptools wheel
-        pip install -r requirements.txt --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple
-
-    # 测试是否安装成功
-    - name: Test PyQt5 installation
+        pip install -r requirements.txt
+        pip install pyinstaller
+        python -m spacy download en_core_web_sm
+        
+    - name: Create .spec file
       run: |
-        python -c "from PyQt5.QtWidgets import QApplication; print('PyQt5 Installed Successfully!')"
+        echo 'block_cipher = None
 
-    # 打包项目为 macOS 可执行文件
-    - name: Package application
+        a = Analysis(
+            ["词性分析最后1.py"],
+            pathex=[],
+            binaries=[],
+            datas=[],
+            hiddenimports=[],
+            hookspath=[],
+            hooksconfig={},
+            runtime_hooks=[],
+            excludes=[],
+            win_no_prefer_redirects=False,
+            win_private_assemblies=False,
+            cipher=block_cipher,
+            noarchive=False,
+        )
+
+        # Add spacy model
+        spacy_data = Tree("venv/lib/python3.9/site-packages/en_core_web_sm")
+        a.datas += spacy_data
+
+        pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+        exe = EXE(
+            pyz,
+            a.scripts,
+            a.binaries,
+            a.zipfiles,
+            a.datas,
+            [],
+            name="词性分析工具",
+            debug=False,
+            bootloader_ignore_signals=False,
+            strip=False,
+            upx=True,
+            upx_exclude=[],
+            runtime_tmpdir=None,
+            console=False,
+            disable_windowed_traceback=False,
+            argv_emulation=True,
+            target_arch=None,
+            codesign_identity=None,
+            entitlements_file=None,
+            icon="app_icon.icns"  # 如果你有图标文件的话
+        )
+
+        app = BUNDLE(
+            exe,
+            name="词性分析工具.app",
+            icon="app_icon.icns",  # 如果你有图标文件的话
+            bundle_identifier="com.shajia.phraseanalyzer",
+            info_plist={
+                "CFBundleShortVersionString": "1.0.0",
+                "CFBundleVersion": "1.0.0",
+                "NSHighResolutionCapable": True,
+                "LSMinimumSystemVersion": "10.13.0",
+            },
+        )' > build.spec
+
+    - name: Build macOS app
       run: |
-        pip install pyinstaller -i https://pypi.tuna.tsinghua.edu.cn/simple
-        pyinstaller --onefile --windowed 词性分析最后1.py
-
-    # 上传生成的文件作为 Artifact（可选）
-    - name: Upload artifact
+        pyinstaller build.spec
+        
+    - name: Create DMG
+      run: |
+        brew install create-dmg
+        create-dmg \
+          --volname "词性分析工具" \
+          --volicon "app_icon.icns" \
+          --window-pos 200 120 \
+          --window-size 600 400 \
+          --icon-size 100 \
+          --icon "词性分析工具.app" 175 120 \
+          --hide-extension "词性分析工具.app" \
+          --app-drop-link 425 120 \
+          "词性分析工具.dmg" \
+          "dist/词性分析工具.app"
+      
+    - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
-        name: packaged-application
-        path: dist/
+        name: macOS-app
+        path: |
+          dist/词性分析工具.app
+          词性分析工具.dmg
+
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          词性分析工具.dmg
+        name: Release ${{ github.sha }}
+        tag_name: v${{ github.run_number }}
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
