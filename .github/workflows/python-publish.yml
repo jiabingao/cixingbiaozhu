@@ -19,23 +19,66 @@ jobs:
       with:
         python-version: '3.9'
         
-    - name: Install dependencies
+    - name: Install Qt dependencies
+      run: |
+        brew install qt@5
+        brew link qt@5
+        
+    - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        # 先安装PyQt5
+        pip install PyQt5==5.15.9
+        # 安装其他依赖，但排除PyQt5相关包
+        grep -v "PyQt5" requirements.txt | pip install -r /dev/stdin
         pip install pyinstaller
+        
+    - name: Download spaCy model
+      run: |
         python -m spacy download en_core_web_sm
+        # 获取spacy模型路径
+        SPACY_PATH=$(python -c "import en_core_web_sm; print(en_core_web_sm.__path__[0])")
+        echo "SPACY_MODEL_PATH=$SPACY_PATH" >> $GITHUB_ENV
         
     - name: Create .spec file
       run: |
-        echo 'block_cipher = None
+        echo 'from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+        block_cipher = None
+        
+        hidden_imports = collect_submodules("spacy")
+        hidden_imports.extend([
+            "spacy",
+            "spacy.lang.en",
+            "spacy.lang.en.examples",
+            "spacy.lang.en.stop_words",
+            "spacy.tokens",
+            "spacy.tokens.doc",
+            "spacy.tokens.token",
+            "spacy.vocab",
+            "spacy.lexeme",
+            "spacy.strings",
+            "spacy.parts_of_speech",
+            "thinc",
+            "cymem",
+            "preshed",
+            "murmurhash",
+            "numpy.core._multiarray_umath",
+            "numpy.core._multiarray_tests"
+        ])
+
+        # 收集所有spacy相关的数据文件
+        datas = []
+        datas.extend(collect_data_files("spacy"))
+        datas.extend(collect_data_files("en_core_web_sm"))
+        datas.extend(collect_data_files("thinc"))
 
         a = Analysis(
             ["词性分析最后1.py"],
             pathex=[],
             binaries=[],
-            datas=[],
-            hiddenimports=[],
+            datas=datas,
+            hiddenimports=hidden_imports,
             hookspath=[],
             hooksconfig={},
             runtime_hooks=[],
@@ -45,10 +88,6 @@ jobs:
             cipher=block_cipher,
             noarchive=False,
         )
-
-        # Add spacy model
-        spacy_data = Tree("venv/lib/python3.9/site-packages/en_core_web_sm")
-        a.datas += spacy_data
 
         pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
@@ -72,13 +111,11 @@ jobs:
             target_arch=None,
             codesign_identity=None,
             entitlements_file=None,
-            icon="app_icon.icns"  # 如果你有图标文件的话
         )
 
         app = BUNDLE(
             exe,
             name="词性分析工具.app",
-            icon="app_icon.icns",  # 如果你有图标文件的话
             bundle_identifier="com.shajia.phraseanalyzer",
             info_plist={
                 "CFBundleShortVersionString": "1.0.0",
@@ -97,7 +134,6 @@ jobs:
         brew install create-dmg
         create-dmg \
           --volname "词性分析工具" \
-          --volicon "app_icon.icns" \
           --window-pos 200 120 \
           --window-size 600 400 \
           --icon-size 100 \
