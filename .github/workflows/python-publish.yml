@@ -10,25 +10,34 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest  # macOS 运行环境
+    runs-on: macos-latest
 
     steps:
-    # 1. 检出代码
-    - name: Check out code
-      uses: actions/checkout@v3
+      - name: Check out code
+        uses: actions/checkout@v3
 
-    # 2. 设置 Python 环境
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'  # 根据项目需要设置 Python 版本
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
 
-    # 3. 安装依赖
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Install build tools for PyQt5
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install sip
 
-    # 4. 运行 Python 脚本
-    - name: Run Python script
-      run: python 词性分析最后1.py
+      - name: Install dependencies
+        run: |
+          pip install --find-links https://www.riverbankcomputing.com/software/pyqt/download5 PyQt5==5.15.9
+          pip install -r requirements.txt
+
+      - name: Install Qt dependencies
+        run: brew install qt
+
+      - name: Set Qt environment variables
+        run: |
+          export QT_QPA_PLATFORM_PLUGIN_PATH=$(brew --prefix qt)/plugins
+          export QT_QPA_PLATFORM=cocoa
+
+      - name: Run Python script
+        run: python 词性分析最后1.py
