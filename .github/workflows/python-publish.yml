@@ -1,43 +1,48 @@
-name: Python Application Workflow on macOS
+name: Build macOS Executable
 
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
 jobs:
-  build:
+  build-macos:
     runs-on: macos-latest
 
     steps:
-      - name: Check out code
+      # Step 1: Checkout the code
+      - name: Checkout code
         uses: actions/checkout@v3
 
+      # Step 2: Set up Python environment
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: Install build tools for PyQt5
-        run: |
-          pip install --upgrade pip setuptools wheel
-          pip install sip
-
+      # Step 3: Install dependencies
       - name: Install dependencies
         run: |
-          pip install --find-links https://www.riverbankcomputing.com/software/pyqt/download5 PyQt5==5.15.9
+          python -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Install Qt dependencies
-        run: brew install qt
-
-      - name: Set Qt environment variables
+      # Step 4: Install PyInstaller
+      - name: Install PyInstaller
         run: |
-          export QT_QPA_PLATFORM_PLUGIN_PATH=$(brew --prefix qt)/plugins
-          export QT_QPA_PLATFORM=cocoa
+          source venv/bin/activate
+          pip install pyinstaller
 
-      - name: Run Python script
-        run: python 词性分析最后1.py
+      # Step 5: Build executable
+      - name: Build executable
+        run: |
+          source venv/bin/activate
+          pyinstaller --onefile --windowed 词性分析最后1.py
+
+      # Step 6: Upload artifact
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: macOS-executable
+          path: dist/
